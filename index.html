@@ -101,15 +101,16 @@
           <button class="small-btn wide" id="refreshInputs">Audio-Inputs laden / aktualisieren</button>
           <div class="setup">
             <div class="setup-title">Audio Setup / Latenzkompensation</div>
-            <label class="checkrow"><input id="autoLatency" type="checkbox" checked> Auto</label>
+            <label class="checkrow"><input id="autoLatency" type="checkbox" checked> Smart Latency</label>
             <div class="readout" id="latencyReadout">0.0 ms</div>
+            <div class="readout" id="smartLatencyStatus">Smart: lernt nach Overdubs · Confidence 0%</div>
             <div class="row"><label>Manual Offset (+ = früher / schneidet Anfang weg)</label><input id="latencyOffset" type="range" min="-2000" max="2000" step="0.1" value="0"></div>
             <div class="readout" id="manualLatencyReadout">+0.0 ms</div>
-            <button class="small-btn" id="calibrateLatency">Calibrate</button>
+            <button class="small-btn" id="calibrateLatency">Smart Calibrate</button>
             <button class="small-btn" id="resetLatency">Reset</button>
             <button class="small-btn" id="exportProject">Projekt sichern</button>
             <label class="small-btn" style="text-align:center;position:relative;overflow:hidden">Projekt laden<input id="importProject" type="file" accept="application/json" style="position:absolute;inset:0;opacity:0"></label>
-            <div class="smallnote">Overdubs werden beim Einfügen automatisch um diesen Wert vorgezogen. Für exakte Kalibrierung: Ausgang des Interfaces kurz auf einen Eingang routen/patchen, dann Calibrate drücken.</div>
+            <div class="smallnote">Smart Latency analysiert Overdubs automatisch und übernimmt nur Messungen mit hoher Confidence. Für beste Autokalibrierung: kurz den Lautsprecher/Output in den gewählten Input hören lassen oder Loopback-Kabel verwenden, dann Smart Calibrate drücken.</div>
           </div>
           <div class="row wide"><label>Master Volume</label><input id="masterVol" type="range" min="0" max="1.2" step="0.01" value="0.9"></div>
         </div>
@@ -148,6 +149,7 @@
 const N=4, DB='portastudio-v3';
 let ctx, micStream, micSource, monitor=false, noise=false, playing=false, recording=false, startAt=0, offset=0, raf, selectedInputId='default';
 let micSplitter=null, monitorGain=null, recStartPos=0, latencyManualMs=0, latencyAuto=true, calibratedLatencyMs=null;
+let smartLatencyMs=null, smartConfidence=0, smartLatencyHistory=[];
 let tapeInput=null, tapeOut=null, tapeDrive=null, tapeComp=null, tapeFilter=null, tapeNoise=null, tapeNoiseGain=null;
 const tracks = Array.from({length:N},(_,i)=>({name:'Track '+(i+1), buffer:null, gain:.85, pan:0, mute:false, solo:false, armed:i===0, inputChannel:i, src:null, playGain:null, playPan:null, meter:0, chunks:[], mediaRecorder:null, recNodes:null}));
 const $=id=>document.getElementById(id); const mixer=$('mixer');
@@ -211,15 +213,22 @@ function estimatedLatencyMs(){
   const base=(ctx?.baseLatency||0)*1000;
   const out=(ctx?.outputLatency||0)*1000;
   const input=getInputLatencyMs();
-  const auto = calibratedLatencyMs!=null ? calibratedLatencyMs : (base+out+input);
+  // Priorität: Smart/gelernter Wert > Loopback-Kalibrierung > Browser-Schätzung.
+  const auto = smartLatencyMs!=null ? smartLatencyMs : (calibratedLatencyMs!=null ? calibratedLatencyMs : (base+out+input));
   return (latencyAuto?auto:0)+latencyManualMs;
 }
 function updateLatencyUI(){
   const el=$('latencyReadout'); if(!el) return;
   const base=(ctx?.baseLatency||0)*1000, out=(ctx?.outputLatency||0)*1000, inp=getInputLatencyMs();
+  const fallback=calibratedLatencyMs??(base+out+inp);
   const total=estimatedLatencyMs();
-  const src=calibratedLatencyMs!=null?'kalibriert':'auto';
-  el.textContent=`${total.toFixed(1)} ms (${src}: ${(latencyAuto?(calibratedLatencyMs??(base+out+inp)):0).toFixed(1)} ms)`;
+  const src=smartLatencyMs!=null?'smart':(calibratedLatencyMs!=null?'kalibriert':'browser');
+  el.textContent=`${total.toFixed(1)} ms (${src}: ${(latencyAuto?(smartLatencyMs??fallback):0).toFixed(1)} ms)`;
+  const st=$('smartLatencyStatus');
+  if(st){
+    const conf=Math.round(smartConfidence*100);
+    st.textContent = smartLatencyMs!=null ? `Smart: ${smartLatencyMs.toFixed(1)} ms · Confidence ${conf}% · ${smartLatencyHistory.length} Messung(en)` : `Smart: lernt nach Overdubs · Confidence ${conf}%`;
+  }
   const man=$('manualLatencyReadout'); if(man) man.textContent=(latencyManualMs>=0?'+':'')+latencyManualMs.toFixed(1)+' ms';
   const sl=$('latencyOffset'); if(sl) sl.value=latencyManualMs;
   const cb=$('autoLatency'); if(cb) cb.checked=latencyAuto;
@@ -247,6 +256,81 @@ function compensatedInsertPos(pos, compMs){
   // Negative Werte bedeuten bewusst später. Positive Werte werden durch Trimmen kompensiert und bleiben am Punch-In-Punkt.
   return Math.max(0, pos + (compMs<0 ? Math.abs(compMs)/1000 : 0));
 }
+function monoFromBuffer(buf, maxSec=8){
+  const len=Math.min(buf.length, Math.floor(buf.sampleRate*maxSec));
+  const out=new Float32Array(len);
+  for(let c=0;c<buf.numberOfChannels;c++){
+    const d=buf.getChannelData(c);
+    for(let i=0;i<len;i++) out[i]+=d[i]/buf.numberOfChannels;
+  }
+  return out;
+}
+function renderReferenceMono(startPos, duration, excludeTrack){
+  if(!ctx) return null;
+  const sr=ctx.sampleRate, len=Math.max(1, Math.floor(duration*sr));
+  const out=new Float32Array(len);
+  let has=false;
+  tracks.forEach((t,idx)=>{
+    if(idx===excludeTrack || !t.buffer || t.mute) return;
+    const g=effectiveGain(t); if(!g) return;
+    const start=Math.floor(startPos*t.buffer.sampleRate);
+    for(let i=0;i<len;i++){
+      const si=start+i; if(si<0 || si>=t.buffer.length) continue;
+      let v=0;
+      for(let c=0;c<t.buffer.numberOfChannels;c++) v+=t.buffer.getChannelData(c)[si]/t.buffer.numberOfChannels;
+      out[i]+=v*g; has=true;
+    }
+  });
+  return has?out:null;
+}
+function downsampleEnvelope(data, srcRate, targetRate=200){
+  const step=Math.max(1, Math.floor(srcRate/targetRate));
+  const n=Math.floor(data.length/step);
+  const out=new Float32Array(n);
+  let mean=0;
+  for(let i=0;i<n;i++){
+    let s=0;
+    for(let j=0;j<step;j++){ const v=data[i*step+j]||0; s+=Math.abs(v); }
+    out[i]=s/step; mean+=out[i];
+  }
+  mean/=Math.max(1,n);
+  for(let i=0;i<n;i++) out[i]-=mean;
+  return {data:out, rate:srcRate/step};
+}
+function correlateLatencyMs(reference, recorded, sampleRate, maxLagMs=600){
+  const minLen=Math.min(reference.length, recorded.length);
+  if(minLen<sampleRate*.5) return null;
+  const a=downsampleEnvelope(reference.subarray(0,minLen), sampleRate);
+  const b=downsampleEnvelope(recorded.subarray(0,minLen), sampleRate);
+  const maxLag=Math.min(Math.floor(maxLagMs/1000*a.rate), Math.floor(a.data.length*.45));
+  let bestLag=0, best=-Infinity, second=-Infinity;
+  for(let lag=0; lag<=maxLag; lag++){
+    let num=0, aa=0, bb=0, count=0;
+    for(let i=0;i<a.data.length-lag;i++){
+      const x=a.data[i], y=b.data[i+lag];
+      num+=x*y; aa+=x*x; bb+=y*y; count++;
+    }
+    const score=(aa>1e-9&&bb>1e-9)?num/Math.sqrt(aa*bb):0;
+    if(score>best){ second=best; best=score; bestLag=lag; }
+    else if(score>second){ second=score; }
+  }
+  const confidence=Math.max(0, Math.min(1, (best-0.12)/0.38)) * Math.max(0, Math.min(1, (best-second+0.02)/0.12));
+  return {ms: bestLag/a.rate*1000, confidence, score:best};
+}
+function learnSmartLatency(rawBuf, startPos, trackIndex){
+  if(!latencyAuto || !rawBuf || !ctx) return null;
+  const ref=renderReferenceMono(startPos, Math.min(8, rawBuf.duration), trackIndex);
+  if(!ref) return null;
+  const rec=monoFromBuffer(rawBuf, Math.min(8, rawBuf.duration));
+  const res=correlateLatencyMs(ref, rec, rawBuf.sampleRate, 700);
+  if(!res || res.ms<5 || res.ms>650 || res.confidence<0.55) return res;
+  smartLatencyHistory.push({ms:res.ms, confidence:res.confidence, at:Date.now()});
+  smartLatencyHistory=smartLatencyHistory.slice(-8);
+  let wsum=0, vsum=0;
+  smartLatencyHistory.forEach(x=>{ const w=Math.max(.1,x.confidence); wsum+=w; vsum+=x.ms*w; });
+  smartLatencyMs=vsum/wsum; smartConfidence=Math.min(1, smartLatencyHistory.reduce((a,x)=>a+x.confidence,0)/smartLatencyHistory.length);
+  return res;
+}
 async function calibrateLatency(){
   await ensureMic(); await ensureAudio(); await ctx.resume();
   show('Kalibrierung startet: Verbinde kurz einen Ausgang deines Interfaces mit dem für Track 1 gewählten Eingang. Es wird ein kurzer Klick abgespielt und gemessen.');
@@ -273,7 +357,7 @@ async function calibrateLatency(){
   if(peak<0.03){ show('Kalibrierung: Kein deutlicher Klick erkannt. Prüfe Loopback/Direct-Mix-Routing.'); return; }
   const measured=(idx/buf.sampleRate - clickDelay)*1000;
   if(measured < 0 || measured > 500){ show('Kalibrierung unplausibel: '+measured.toFixed(1)+' ms. Bitte Loopback prüfen oder Manual Offset benutzen.'); return; }
-  calibratedLatencyMs=measured; latencyAuto=true; updateLatencyUI(); autosaveSoon();
+  calibratedLatencyMs=measured; smartLatencyMs=measured; smartConfidence=.95; smartLatencyHistory.push({ms:measured,confidence:.95,at:Date.now()}); smartLatencyHistory=smartLatencyHistory.slice(-8); latencyAuto=true; updateLatencyUI(); autosaveSoon();
   show('Kalibrierung gespeichert: '+calibratedLatencyMs.toFixed(1)+' ms. Neue Overdubs werden entsprechend früher gesetzt bzw. am Anfang getrimmt.');
 }
 
@@ -346,10 +430,16 @@ function makeTrackRecorder(t){
     if(!blob.size) return;
     const arr=await blob.arrayBuffer();
     const rawBuf=await ctx.decodeAudioData(arr);
+    const trackIndex=tracks.indexOf(t);
+    const learned=learnSmartLatency(rawBuf, startPos, trackIndex);
     const compMs=estimatedLatencyMs();
     const fixedBuf=applyLatencyCompensation(rawBuf, compMs);
     t.buffer=mergeAt(t.buffer,fixedBuf,compensatedInsertPos(startPos, compMs));
-    $('latencyReadout').textContent += ' / angewendet: '+compMs.toFixed(1)+' ms';
+    updateLatencyUI();
+    const st=$('smartLatencyStatus');
+    if(st && learned){
+      st.textContent += learned.confidence>=.55 ? ` · neue Messung ${learned.ms.toFixed(1)} ms` : ` · Messung verworfen (${Math.round(learned.confidence*100)}%)`;
+    }
     renderMixer(); updateMobileUI(); autosaveSoon();
   };
   return mr;
@@ -384,10 +474,10 @@ function renderTapeToBuffer(buffer){
 }
 function bufferToWav(buffer){ const ch=buffer.numberOfChannels, len=buffer.length*ch*2+44, ab=new ArrayBuffer(len), v=new DataView(ab); let p=0; const ws=s=>{for(let i=0;i<s.length;i++)v.setUint8(p++,s.charCodeAt(i));}; ws('RIFF'); v.setUint32(p,36+buffer.length*ch*2,true);p+=4;ws('WAVEfmt ');v.setUint32(p,16,true);p+=4;v.setUint16(p,1,true);p+=2;v.setUint16(p,ch,true);p+=2;v.setUint32(p,buffer.sampleRate,true);p+=4;v.setUint32(p,buffer.sampleRate*ch*2,true);p+=4;v.setUint16(p,ch*2,true);p+=2;v.setUint16(p,16,true);p+=2;ws('data');v.setUint32(p,buffer.length*ch*2,true);p+=4; for(let i=0;i<buffer.length;i++)for(let c=0;c<ch;c++){let s=Math.max(-1,Math.min(1,buffer.getChannelData(c)[i]));v.setInt16(p,s<0?s*0x8000:s*0x7fff,true);p+=2;} return new Blob([ab],{type:'audio/wav'}); }
 function downloadBlob(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
-async function save(){ await ensureAudio(); const data={selectedInputId,latencyManualMs,latencyAuto,calibratedLatencyMs,tracks:await Promise.all(tracks.map(async t=>({name:t.name,gain:t.gain,pan:t.pan,mute:t.mute,solo:t.solo,armed:t.armed,inputChannel:t.inputChannel,wav:t.buffer?await blobToDataURL(bufferToWav(t.buffer)):null})))}; localStorage.setItem(DB,JSON.stringify(data)); $('saveStatus').textContent='Gespeichert'; $('saveStatus').classList.add('on'); }
+async function save(){ await ensureAudio(); const data={selectedInputId,latencyManualMs,latencyAuto,calibratedLatencyMs,smartLatencyMs,smartConfidence,smartLatencyHistory,tracks:await Promise.all(tracks.map(async t=>({name:t.name,gain:t.gain,pan:t.pan,mute:t.mute,solo:t.solo,armed:t.armed,inputChannel:t.inputChannel,wav:t.buffer?await blobToDataURL(bufferToWav(t.buffer)):null})))}; localStorage.setItem(DB,JSON.stringify(data)); $('saveStatus').textContent='Gespeichert'; $('saveStatus').classList.add('on'); }
 let saveTimer; function autosaveSoon(){ $('saveStatus').textContent='Änderungen...'; clearTimeout(saveTimer); saveTimer=setTimeout(save,900); }
 function blobToDataURL(blob){ return new Promise(r=>{const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob);}); }
-async function load(){ const raw=localStorage.getItem(DB); if(!raw) return; await ensureAudio(); const data=JSON.parse(raw); if(data.selectedInputId) selectedInputId=data.selectedInputId; if(typeof data.latencyManualMs==='number') latencyManualMs=data.latencyManualMs; if(typeof data.latencyAuto==='boolean') latencyAuto=data.latencyAuto; if(typeof data.calibratedLatencyMs==='number') calibratedLatencyMs=data.calibratedLatencyMs; updateLatencyUI(); for(let i=0;i<N;i++){ if(!data.tracks?.[i]) continue; Object.assign(tracks[i],data.tracks[i]); if(tracks[i].inputChannel===undefined) tracks[i].inputChannel=i; if(data.tracks[i].wav){ const arr=await (await fetch(data.tracks[i].wav)).arrayBuffer(); tracks[i].buffer=await ctx.decodeAudioData(arr); } } renderMixer(); }
+async function load(){ const raw=localStorage.getItem(DB); if(!raw) return; await ensureAudio(); const data=JSON.parse(raw); if(data.selectedInputId) selectedInputId=data.selectedInputId; if(typeof data.latencyManualMs==='number') latencyManualMs=data.latencyManualMs; if(typeof data.latencyAuto==='boolean') latencyAuto=data.latencyAuto; if(typeof data.calibratedLatencyMs==='number') calibratedLatencyMs=data.calibratedLatencyMs; if(typeof data.smartLatencyMs==='number') smartLatencyMs=data.smartLatencyMs; if(typeof data.smartConfidence==='number') smartConfidence=data.smartConfidence; if(Array.isArray(data.smartLatencyHistory)) smartLatencyHistory=data.smartLatencyHistory.slice(-8); updateLatencyUI(); for(let i=0;i<N;i++){ if(!data.tracks?.[i]) continue; Object.assign(tracks[i],data.tracks[i]); if(tracks[i].inputChannel===undefined) tracks[i].inputChannel=i; if(data.tracks[i].wav){ const arr=await (await fetch(data.tracks[i].wav)).arrayBuffer(); tracks[i].buffer=await ctx.decodeAudioData(arr); } } renderMixer(); }
 
 let mobileTrack=0, mobileCountdown=null;
 function isMobileLike(){ return matchMedia('(max-width: 700px)').matches || matchMedia('(pointer: coarse)').matches; }
@@ -398,7 +488,7 @@ function updateMobileUI(){
   const inp=$('mobileInput'); if(inp){ inp.innerHTML=channelOptions(tracks[mobileTrack].inputChannel??mobileTrack); inp.value=tracks[mobileTrack].inputChannel??mobileTrack; }
   const arm=$('mobileArm'); if(arm){ arm.textContent=(tracks[mobileTrack].armed?'REC an':'REC aus')+' · Track '+(mobileTrack+1); arm.classList.toggle('active', tracks[mobileTrack].armed); }
   const mon=$('mobileMonitor'); if(mon){ mon.textContent=monitor?'Monitor an':'Monitor aus'; mon.classList.toggle('active', monitor); }
-  const help=$('mobileLatencyHelp'); if(help){ help.textContent='Overdub-Korrektur: '+(latencyManualMs>=0?'+':'')+latencyManualMs.toFixed(1)+' ms. Zu spät? „früher“. Zu früh? „später“.'; }
+  const help=$('mobileLatencyHelp'); if(help){ help.textContent='Smart Latency: '+(smartLatencyMs!=null?smartLatencyMs.toFixed(1)+' ms · '+Math.round(smartConfidence*100)+'%':'lernt noch')+'. Bei Bedarf: zu spät = früher, zu früh = später.'; }
 }
 function mobileNudge(ms){ latencyManualMs=Math.max(-2000,Math.min(2000,latencyManualMs+ms)); latencyAuto=false; updateLatencyUI(); updateMobileUI(); autosaveSoon(); }
 function startMobileCountdown(){
@@ -419,7 +509,7 @@ $('mobileLater')?.addEventListener('click',()=>mobileNudge(-5));
 $('mobileRec')?.addEventListener('click',startMobileCountdown);
 $('mobileAdvanced')?.addEventListener('click',()=>{ document.body.classList.toggle('show-advanced'); $('mobileAdvanced').textContent=document.body.classList.contains('show-advanced')?'Advanced aus':'Advanced'; });
 
-$('play').onclick=play; $('stop').onclick=()=>{stop();updateTime();}; $('rec').onclick=startRec; $('rew').onclick=rewind; $('ff').onclick=ff; $('save').onclick=save; $('export').onclick=exportMix; $('refreshInputs').onclick=refreshInputDevices; $('latencyOffset').oninput=e=>{latencyManualMs=+e.target.value; updateLatencyUI(); autosaveSoon();}; $('autoLatency').onchange=e=>{latencyAuto=e.target.checked; updateLatencyUI(); autosaveSoon();}; $('resetLatency').onclick=()=>{latencyManualMs=0; calibratedLatencyMs=null; latencyAuto=true; updateLatencyUI(); autosaveSoon();}; $('calibrateLatency').onclick=()=>calibrateLatency().catch(e=>show('Kalibrierung fehlgeschlagen: '+e.message));
+$('play').onclick=play; $('stop').onclick=()=>{stop();updateTime();}; $('rec').onclick=startRec; $('rew').onclick=rewind; $('ff').onclick=ff; $('save').onclick=save; $('export').onclick=exportMix; $('refreshInputs').onclick=refreshInputDevices; $('latencyOffset').oninput=e=>{latencyManualMs=+e.target.value; updateLatencyUI(); autosaveSoon();}; $('autoLatency').onchange=e=>{latencyAuto=e.target.checked; updateLatencyUI(); autosaveSoon();}; $('resetLatency').onclick=()=>{latencyManualMs=0; calibratedLatencyMs=null; smartLatencyMs=null; smartConfidence=0; smartLatencyHistory=[]; latencyAuto=true; updateLatencyUI(); autosaveSoon();}; $('calibrateLatency').onclick=()=>calibrateLatency().catch(e=>show('Kalibrierung fehlgeschlagen: '+e.message));
 $('inputDevice').onchange=()=>{ selectedInputId=$('inputDevice').value; const wasMonitor=monitor; if(monitor&&monitorGain){try{monitorGain.disconnect()}catch{}} closeMic(); if(wasMonitor){ ensureMic().then(()=>startMonitor()).catch(e=>show('Audiointerface konnte nicht geöffnet werden: '+e.message)); } autosaveSoon(); };
 function startMonitor(){ if(!micSplitter) return; monitorGain=ctx.createGain(); monitorGain.gain.value=.8; for(let c=0;c<8;c++){ try{ micSplitter.connect(monitorGain,c,0); }catch{} } monitorGain.connect(masterNode()); }
 function stopMonitor(){ if(monitorGain){ try{monitorGain.disconnect()}catch{} monitorGain=null; } }
