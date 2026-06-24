@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#191816" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Portastudio" />
+<meta name="mobile-web-app-capable" content="yes" />
+<title>4-Track Web Portastudio V3</title>
+<style>
+  :root{
+    --bg:#151412; --panel:#25231f; --panel2:#34312b; --ink:#f1eadb; --muted:#aaa08d;
+    --line:#4b453a; --accent:#d87b32; --red:#d94b3d; --green:#80c46c; --yellow:#e3c75c;
+    --metal:#b8b0a0; --shadow: rgba(0,0,0,.45); --radius:18px;
+    --track-min: 230px;
+  }
+  *{box-sizing:border-box} html,body{height:100%}
+  body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:radial-gradient(circle at 20% 0%,#39352d 0,#171613 44%,#090908 100%);color:var(--ink);}
+  button,input,select{font:inherit} button{cursor:pointer;color:var(--ink)}
+  .app{min-height:100%;padding:clamp(10px,2vw,28px);padding-bottom:calc(110px + env(safe-area-inset-bottom));}
+  .machine{max-width:1280px;margin:auto;background:linear-gradient(150deg,#343029,#211f1b 70%);border:1px solid #5a5143;border-radius:28px;box-shadow:0 30px 80px var(--shadow), inset 0 1px 0 rgba(255,255,255,.08);overflow:hidden;}
+  header{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:22px clamp(16px,3vw,34px);border-bottom:1px solid var(--line);background:linear-gradient(180deg,#2f2b25,#221f1b)}
+  h1{margin:0;font-size:clamp(1.15rem,3vw,2rem);letter-spacing:.04em;text-transform:uppercase}.sub{color:var(--muted);font-size:.9rem;margin-top:4px}.brand{color:var(--accent)}
+  .status{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.pill{border:1px solid var(--line);background:#191816;border-radius:999px;padding:7px 10px;color:var(--muted);font-size:.84rem}.pill.on{color:#fff;border-color:var(--green);box-shadow:0 0 0 1px rgba(128,196,108,.2)}
+  .top{display:grid;grid-template-columns: minmax(280px, .95fr) 1.25fr;gap:18px;padding:18px clamp(14px,2vw,26px)}
+  .cassette,.master,.track,.panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:var(--radius);box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 8px 20px rgba(0,0,0,.18)}
+  .cassette{padding:18px;min-height:250px}.tape-title{display:flex;justify-content:space-between;color:var(--muted);font-size:.82rem;text-transform:uppercase;letter-spacing:.09em;margin-bottom:12px}
+  .cass-body{position:relative;background:#181713;border:2px solid #565044;border-radius:18px;height:175px;box-shadow:inset 0 0 40px rgba(0,0,0,.65)}
+  .label{position:absolute;left:8%;right:8%;top:14px;height:38px;background:linear-gradient(90deg,#d9caa6,#f1dfb4,#d9caa6);border-radius:7px;color:#2a241c;display:flex;align-items:center;justify-content:center;font-weight:800;letter-spacing:.08em}
+  .reel{position:absolute;top:72px;width:76px;height:76px;border-radius:50%;background:repeating-conic-gradient(#111 0 10deg,#766f62 10deg 22deg);border:8px solid #c4bba9;box-shadow:inset 0 0 0 9px #222}.reel.left{left:16%}.reel.right{right:16%}.reel.spin{animation:spin 1.3s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+  .window{position:absolute;left:38%;right:38%;top:92px;height:34px;border-radius:18px;background:#0c0b0a;border:1px solid #5f574b}.counter{margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px}.time{font-variant-numeric:tabular-nums;background:#080807;border:1px solid #555045;border-radius:8px;padding:10px 12px;letter-spacing:.09em;color:#e9e1cf}.hint{font-size:.82rem;color:var(--muted);line-height:1.35}
+  .master{padding:18px}.meter-wrap{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.meter{height:120px;background:#0a0a09;border:1px solid #5a5144;border-radius:10px;padding:7px;display:flex;align-items:end}.bar{width:100%;height:2%;border-radius:6px;background:linear-gradient(0deg,var(--green),var(--yellow) 72%,var(--red));transition:height .05s linear}.master-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}.small-btn,.transport button,.file-btn{background:#1a1815;border:1px solid #5b5346;border-radius:12px;padding:10px 12px}.small-btn:hover,.transport button:hover,.file-btn:hover{border-color:#8b7c65}.small-btn.active{background:#3a241c;border-color:var(--accent)}
+  .mixer{display:grid;grid-template-columns:repeat(4,minmax(var(--track-min),1fr));gap:14px;padding:0 clamp(14px,2vw,26px) 18px;overflow-x:auto;scroll-snap-type:x proximity}.track{padding:14px;scroll-snap-align:start}.track-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.track h2{font-size:1rem;margin:0;text-transform:uppercase;letter-spacing:.08em}.armed{width:12px;height:12px;border-radius:50%;background:#4e2a25;box-shadow:0 0 0 1px #7b4a43}.armed.on{background:var(--red);box-shadow:0 0 18px var(--red)}
+  .strip{display:grid;grid-template-columns:44px 1fr 58px;gap:12px;align-items:center}.vu{height:190px;background:#0a0a09;border:1px solid #544c40;border-radius:10px;padding:6px;display:flex;align-items:end}.controls{display:grid;gap:12px}.row{display:grid;gap:5px}.row label,.knob label{font-size:.72rem;text-transform:uppercase;color:var(--muted);letter-spacing:.08em}input[type=range]{width:100%;accent-color:var(--accent)}.fader{writing-mode:bt-lr;-webkit-appearance:slider-vertical;appearance:slider-vertical;height:190px;width:42px;accent-color:var(--metal)}.track-buttons{display:grid;grid-template-columns:1fr 1fr;gap:7px}.track-buttons button{padding:8px 7px;border-radius:10px;border:1px solid #5b5346;background:#181713;font-size:.82rem}.track-buttons button.active{background:#2f2218;border-color:var(--accent);color:#fff}.wave{height:42px;background:#11100e;border:1px solid #51493d;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.76rem;overflow:hidden}.wave canvas{width:100%;height:100%}.name{width:100%;background:#171613;color:var(--ink);border:1px solid #50483d;border-radius:8px;padding:7px}.device-select{width:100%;background:#171613;color:var(--ink);border:1px solid #50483d;border-radius:10px;padding:9px}.wide{grid-column:1/-1}.setup{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:10px;border:1px solid #51493d;border-radius:14px;padding:10px;background:#1b1916}.setup-title{grid-column:1/-1;color:var(--accent);font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800}.readout{font-variant-numeric:tabular-nums;background:#0b0a09;border:1px solid #50483d;border-radius:9px;padding:8px;color:#f1eadb}.checkrow{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:.9rem}.smallnote{grid-column:1/-1;color:var(--muted);font-size:.78rem;line-height:1.35}
+  .transport{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);width:min(940px,calc(100% - 24px));z-index:10;display:grid;grid-template-columns:repeat(7,1fr);gap:8px;background:rgba(24,22,18,.88);backdrop-filter:blur(12px);border:1px solid #5b5346;border-radius:18px;padding:10px;box-shadow:0 14px 40px rgba(0,0,0,.45)}.transport button{font-weight:800}.transport .rec{color:#fff;background:#551f1b;border-color:#a33d34}.transport .play{background:#1d3220;border-color:#4e8954}
+  .io{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:0 clamp(14px,2vw,26px) 24px}.file-btn{text-align:center;position:relative;overflow:hidden}.file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+  dialog{border:1px solid var(--line);border-radius:18px;background:#24211d;color:var(--ink);max-width:680px}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}a{color:#ffd09a}
+  @media (max-width: 900px){.top{grid-template-columns:1fr}.mixer{grid-template-columns:repeat(4,minmax(250px,80vw))}.io{grid-template-columns:1fr 1fr}.transport{grid-template-columns:repeat(4,1fr)}.transport button{padding:12px 6px}.status{justify-content:flex-start}header{grid-template-columns:1fr}}
+  @media (max-width: 520px){.app{padding:8px;padding-bottom:168px}.machine{border-radius:18px}.mixer{display:flex;gap:12px}.track{min-width:calc(100vw - 34px)}.strip{grid-template-columns:36px 1fr 50px}.io{grid-template-columns:1fr}.transport{grid-template-columns:repeat(3,1fr);bottom:8px}.cass-body{height:155px}.reel{width:62px;height:62px}.master-controls{grid-template-columns:1fr}}
+
+  .mobile-quick{display:none}
+  .mobile-advanced-toggle{display:none}
+  @media (max-width: 700px), (pointer: coarse){
+    body.mobile-mode .sub{font-size:.78rem}
+    body.mobile-mode .mobile-quick{display:grid;gap:12px;margin:0 clamp(10px,2vw,18px) 14px;padding:14px;background:linear-gradient(180deg,#34312b,#25231f);border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 20px rgba(0,0,0,.2)}
+    body.mobile-mode .mobile-title{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--accent);font-weight:900;text-transform:uppercase;letter-spacing:.08em}
+    body.mobile-mode .mobile-track-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    body.mobile-mode .mobile-track-tabs button, body.mobile-mode .mobile-grid button{min-height:48px;border-radius:14px;border:1px solid #5b5346;background:#181713;color:var(--ink);font-weight:800}
+    body.mobile-mode .mobile-track-tabs button.active, body.mobile-mode .mobile-grid button.active{background:#3a241c;border-color:var(--accent)}
+    body.mobile-mode .mobile-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    body.mobile-mode .mobile-grid .wide{grid-column:1/-1}
+    body.mobile-mode .mobile-note{color:var(--muted);font-size:.82rem;line-height:1.35}
+    body.mobile-mode .top{grid-template-columns:1fr;padding:12px 10px}
+    body.mobile-mode .cassette{min-height:auto;padding:12px}
+    body.mobile-mode .cass-body{height:118px}
+    body.mobile-mode .reel{top:56px;width:46px;height:46px;border-width:5px}
+    body.mobile-mode .label{height:30px;font-size:.8rem}
+    body.mobile-mode .window{top:70px}
+    body.mobile-mode .counter{align-items:flex-start}
+    body.mobile-mode .hint{display:none}
+    body.mobile-mode .master{padding:12px}
+    body.mobile-mode .meter-wrap{height:56px;margin:8px 0}.mobile-mode .meter{height:56px}
+    body.mobile-mode .setup, body.mobile-mode .io{display:none}
+    body.mobile-mode.show-advanced .setup, body.mobile-mode.show-advanced .io{display:grid}
+    body.mobile-mode .mobile-advanced-toggle{display:inline-block}
+    body.mobile-mode .mixer{display:flex;padding:0 10px 14px;gap:10px}
+    body.mobile-mode .track{min-width:calc(100vw - 28px);padding:12px}
+    body.mobile-mode .strip{grid-template-columns:34px 1fr;gap:10px}
+    body.mobile-mode .fader{display:none}
+    body.mobile-mode .vu{height:144px}
+    body.mobile-mode .row label{font-size:.68rem}
+    body.mobile-mode .track-buttons button{min-height:44px}
+    body.mobile-mode .transport{grid-template-columns:repeat(3,1fr);bottom:8px;width:calc(100% - 16px);gap:7px;padding:8px}
+    body.mobile-mode .transport button{min-height:50px;padding:8px 4px;font-size:.86rem}
+    body.mobile-mode .transport #rew, body.mobile-mode .transport #ff{display:none}
+    body.mobile-mode .app{padding:8px;padding-bottom:186px}
+  }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="machine">
+    <header>
+      <div><h1><span class="brand">4-Track</span> Web Portastudio</h1><div class="sub">V3 · Responsive Desktop/Mobile · Auto Overdub Assist · Real Tape · PWA-ready</div></div>
+      <div class="status"><span id="micStatus" class="pill">Mikrofon nicht aktiv</span><span id="saveStatus" class="pill">Autosave bereit</span><button id="installApp" class="pill" style="display:none">App installieren</button></div>
+    </header>
+    <section class="top">
+      <div class="cassette">
+        <div class="tape-title"><span>Compact Cassette</span><span id="modeText">STOP</span></div>
+        <div class="cass-body"><div class="label">PORTASTUDIO SESSION</div><div class="reel left" id="reelL"></div><div class="reel right" id="reelR"></div><div class="window"></div></div>
+        <div class="counter"><div class="time" id="time">00:00.0</div><div class="hint">Overdub: Track(s) auf REC schalten, PLAY+REC drücken. Bestehende Tracks laufen mit, neue Aufnahme landet nur auf bewaffneten Tracks.</div></div>
+      </div>
+      <div class="master">
+        <h2>Master</h2>
+        <div class="meter-wrap"><div class="meter"><div class="bar" id="masterL"></div></div><div class="meter"><div class="bar" id="masterR"></div></div></div>
+        <div class="master-controls">
+          <button class="small-btn" id="monitorBtn">Input Monitor</button><button class="small-btn" id="noiseBtn">Real Tape</button>
+          <div class="row wide"><label>Audiointerface / Eingang</label><select id="inputDevice" class="device-select"><option value="default">System-Standard</option></select></div>
+          <button class="small-btn wide" id="refreshInputs">Audio-Inputs laden / aktualisieren</button>
+          <div class="setup">
+            <div class="setup-title">Audio Setup / Latenzkompensation</div>
+            <label class="checkrow"><input id="autoLatency" type="checkbox" checked> Auto</label>
+            <div class="readout" id="latencyReadout">0.0 ms</div>
+            <div class="row"><label>Manual Offset (+ = früher / schneidet Anfang weg)</label><input id="latencyOffset" type="range" min="-2000" max="2000" step="0.1" value="0"></div>
+            <div class="readout" id="manualLatencyReadout">+0.0 ms</div>
+            <button class="small-btn" id="calibrateLatency">Calibrate</button>
+            <button class="small-btn" id="resetLatency">Reset</button>
+            <button class="small-btn" id="exportProject">Projekt sichern</button>
+            <label class="small-btn" style="text-align:center;position:relative;overflow:hidden">Projekt laden<input id="importProject" type="file" accept="application/json" style="position:absolute;inset:0;opacity:0"></label>
+            <div class="smallnote">Overdubs werden beim Einfügen automatisch um diesen Wert vorgezogen. Für exakte Kalibrierung: Ausgang des Interfaces kurz auf einen Eingang routen/patchen, dann Calibrate drücken.</div>
+          </div>
+          <div class="row wide"><label>Master Volume</label><input id="masterVol" type="range" min="0" max="1.2" step="0.01" value="0.9"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mobile-quick" id="mobileQuick">
+      <div class="mobile-title"><span>Smartphone Auto Mode</span><button class="small-btn mobile-advanced-toggle" id="mobileAdvanced">Advanced</button></div>
+      <div class="mobile-track-tabs" id="mobileTrackTabs"></div>
+      <div class="mobile-grid">
+        <label class="row wide"><span style="font-size:.72rem;text-transform:uppercase;color:var(--muted);letter-spacing:.08em">Eingang für aktiven Track</span><select id="mobileInput" class="device-select"></select></label>
+        <button id="mobileArm">REC für Track</button>
+        <button id="mobileMonitor">Monitor</button>
+        <button id="mobileEarlier">Overdub früher</button>
+        <button id="mobileLater">Overdub später</button>
+        <button class="wide rec" id="mobileRec">3…2…1 REC</button>
+      </div>
+      <div class="mobile-note" id="mobileLatencyHelp">Nach einem Overdub: Wenn die neue Spur zu spät ist, tippe „Overdub früher“. Wenn sie zu früh ist, tippe „Overdub später“. Der Wert wird automatisch gespeichert.</div>
+    </section>
+    <section class="mixer" id="mixer"></section>
+    <section class="io">
+      <label class="file-btn">Import Audio auf Track 1<input type="file" data-track="0" accept="audio/*"></label>
+      <label class="file-btn">Import Audio auf Track 2<input type="file" data-track="1" accept="audio/*"></label>
+      <label class="file-btn">Import Audio auf Track 3<input type="file" data-track="2" accept="audio/*"></label>
+      <label class="file-btn">Import Audio auf Track 4<input type="file" data-track="3" accept="audio/*"></label>
+    </section>
+  </main>
+</div>
+<nav class="transport">
+  <button id="rew">⏪ REW</button><button id="play" class="play">▶ PLAY</button><button id="stop">■ STOP</button><button id="rec" class="rec">● REC</button><button id="ff">⏩ FF</button><button id="save">💾 SAVE</button><button id="export">⬇ MIX WAV</button>
+</nav>
+<dialog id="help"><h3>Hinweis</h3><p id="helpText"></p><div class="modal-actions"><button class="small-btn" onclick="help.close()">OK</button></div></dialog>
+<script>
+(() => {
+'use strict';
+const N=4, DB='portastudio-v3';
+let ctx, micStream, micSource, monitor=false, noise=false, playing=false, recording=false, startAt=0, offset=0, raf, selectedInputId='default';
+let micSplitter=null, monitorGain=null, recStartPos=0, latencyManualMs=0, latencyAuto=true, calibratedLatencyMs=null;
+let tapeInput=null, tapeOut=null, tapeDrive=null, tapeComp=null, tapeFilter=null, tapeNoise=null, tapeNoiseGain=null;
+const tracks = Array.from({length:N},(_,i)=>({name:'Track '+(i+1), buffer:null, gain:.85, pan:0, mute:false, solo:false, armed:i===0, inputChannel:i, src:null, playGain:null, playPan:null, meter:0, chunks:[], mediaRecorder:null, recNodes:null}));
+const $=id=>document.getElementById(id); const mixer=$('mixer');
+function show(msg){ $('helpText').textContent=msg; $('help').showModal(); }
+function channelOptions(selected){ return Array.from({length:8},(_,i)=>`<option value="${i}" ${+selected===i?'selected':''}>Input ${i+1}</option>`).join(''); }
+function renderMixer(){
+  mixer.innerHTML='';
+  tracks.forEach((t,i)=>{
+    if(t.inputChannel===undefined) t.inputChannel=i;
+    const el=document.createElement('article'); el.className='track';
+    el.innerHTML=`<div class="track-head"><h2>${t.name}</h2><span id="armed${i}" class="armed ${t.armed?'on':''}"></span></div><input class="name" data-name="${i}" value="${t.name}"><div class="strip"><div class="vu"><div class="bar" id="vu${i}"></div></div><div class="controls"><div class="row"><label>Audio Eingang</label><select class="device-select" data-channel="${i}">${channelOptions(t.inputChannel)}</select></div><div class="wave" id="wave${i}">${t.buffer?'Audio geladen':'leer'}</div><div class="row"><label>Volume</label><input data-gain="${i}" type="range" min="0" max="1.25" step="0.01" value="${t.gain}"></div><div class="row"><label>Pan</label><input data-pan="${i}" type="range" min="-1" max="1" step="0.01" value="${t.pan}"></div><div class="track-buttons"><button data-arm="${i}" class="${t.armed?'active':''}">REC</button><button data-mute="${i}" class="${t.mute?'active':''}">MUTE</button><button data-solo="${i}" class="${t.solo?'active':''}">SOLO</button><button data-clear="${i}">CLEAR</button></div></div><input class="fader" data-gain="${i}" type="range" min="0" max="1.25" step="0.01" value="${t.gain}"></div>`;
+    mixer.appendChild(el); drawWave(i);
+  });
+}
+function bindUI(){
+  document.body.addEventListener('input',e=>{ const d=e.target.dataset; if(d.gain!==undefined){tracks[d.gain].gain=+e.target.value; syncGains(d.gain); updateLiveMix(); autosaveSoon();} if(d.pan!==undefined){tracks[d.pan].pan=+e.target.value; updateLiveMix(); autosaveSoon();} if(d.name!==undefined){tracks[d.name].name=e.target.value; autosaveSoon();} });
+  document.body.addEventListener('change',e=>{ const d=e.target.dataset; if(d.channel!==undefined){tracks[d.channel].inputChannel=+e.target.value; autosaveSoon();} });
+  document.body.addEventListener('click',e=>{ const d=e.target.dataset; if(d.arm!==undefined){tracks[d.arm].armed=!tracks[d.arm].armed; renderMixer(); updateMobileUI(); autosaveSoon();} if(d.mute!==undefined){tracks[d.mute].mute=!tracks[d.mute].mute; renderMixer(); updateMobileUI(); updateLiveMix(); autosaveSoon();} if(d.solo!==undefined){tracks[d.solo].solo=!tracks[d.solo].solo; renderMixer(); updateMobileUI(); updateLiveMix(); autosaveSoon();} if(d.clear!==undefined){const t=tracks[d.clear]; try{t.src&&t.src.stop()}catch{} t.src=null; t.playGain=null; t.playPan=null; t.buffer=null; renderMixer(); updateMobileUI(); updateLiveMix(); autosaveSoon();} });
+  document.querySelectorAll('input[type=file]').forEach(inp=>inp.onchange=importAudio);
+}
+function syncGains(i){ document.querySelectorAll(`[data-gain="${i}"]`).forEach(x=>x.value=tracks[i].gain); }
+async function ensureAudio(){ if(ctx) return; ctx=new (window.AudioContext||window.webkitAudioContext)(); updateLatencyUI(); }
+async function refreshInputDevices(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.enumerateDevices){ show('Dein Browser unterstützt keine freie Audiointerface-Auswahl.'); return; }
+  try{ const tmp=await navigator.mediaDevices.getUserMedia({audio:true}); tmp.getTracks().forEach(x=>x.stop()); }catch(e){}
+  const devices=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
+  const sel=$('inputDevice'), oldVal=selectedInputId||sel.value||'default';
+  sel.innerHTML='<option value="default">System-Standard</option>'+devices.map((d,i)=>`<option value="${d.deviceId}">${d.label||('Audiointerface '+(i+1))}</option>`).join('');
+  if([...sel.options].some(o=>o.value===oldVal)) sel.value=oldVal;
+  selectedInputId=sel.value;
+}
+function closeMic(){
+  if(micSource){ try{micSource.disconnect()}catch{} micSource=null; }
+  micSplitter=null;
+  if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
+  $('micStatus').textContent='Mikrofon nicht aktiv'; $('micStatus').classList.remove('on');
+}
+async function ensureMic(){
+  await ensureAudio();
+  if(micStream && micSource) return micStream;
+  const audio={echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:{ideal:8}};
+  if(selectedInputId&&selectedInputId!=='default') audio.deviceId={exact:selectedInputId};
+  micStream=await navigator.mediaDevices.getUserMedia({audio});
+  micSource=ctx.createMediaStreamSource(micStream);
+  micSplitter=ctx.createChannelSplitter(8);
+  micSource.connect(micSplitter);
+  const track=micStream.getAudioTracks()[0];
+  const settings=track?.getSettings?.()||{};
+  const label=track?.label||'gewähltes Audiointerface';
+  $('micStatus').textContent='Input aktiv: '+label+(settings.channelCount?' / '+settings.channelCount+' Kanäle':''); $('micStatus').classList.add('on'); updateLatencyUI();
+  return micStream;
+}
+
+function getInputLatencyMs(){
+  try{
+    const st=micStream?.getAudioTracks?.()[0]?.getSettings?.()||{};
+    return Number(st.latency||0)*1000;
+  }catch{return 0;}
+}
+function estimatedLatencyMs(){
+  const base=(ctx?.baseLatency||0)*1000;
+  const out=(ctx?.outputLatency||0)*1000;
+  const input=getInputLatencyMs();
+  const auto = calibratedLatencyMs!=null ? calibratedLatencyMs : (base+out+input);
+  return (latencyAuto?auto:0)+latencyManualMs;
+}
+function updateLatencyUI(){
+  const el=$('latencyReadout'); if(!el) return;
+  const base=(ctx?.baseLatency||0)*1000, out=(ctx?.outputLatency||0)*1000, inp=getInputLatencyMs();
+  const total=estimatedLatencyMs();
+  const src=calibratedLatencyMs!=null?'kalibriert':'auto';
+  el.textContent=`${total.toFixed(1)} ms (${src}: ${(latencyAuto?(calibratedLatencyMs??(base+out+inp)):0).toFixed(1)} ms)`;
+  const man=$('manualLatencyReadout'); if(man) man.textContent=(latencyManualMs>=0?'+':'')+latencyManualMs.toFixed(1)+' ms';
+  const sl=$('latencyOffset'); if(sl) sl.value=latencyManualMs;
+  const cb=$('autoLatency'); if(cb) cb.checked=latencyAuto;
+}
+function copyBufferSlice(buf, startSample, lengthSamples){
+  const ch=buf.numberOfChannels, out=ctx.createBuffer(ch, Math.max(1,lengthSamples), buf.sampleRate);
+  for(let c=0;c<ch;c++){
+    const src=buf.getChannelData(c), dst=out.getChannelData(c);
+    const from=Math.max(0,startSample), to=Math.min(src.length, from+lengthSamples);
+    if(to>from) dst.set(src.subarray(from,to),0);
+  }
+  return out;
+}
+function applyLatencyCompensation(buf, compMs){
+  // Positiver Offset = Overdub früher: Encoder-/Interface-Versatz wird aus dem Anfang der Aufnahme herausgeschnitten.
+  // Das ist bei MediaRecorder zuverlässiger als nur den ganzen Clip früher einzusetzen.
+  const samples=Math.round((compMs/1000)*buf.sampleRate);
+  if(samples>0){
+    if(samples>=buf.length-1) return buf;
+    return copyBufferSlice(buf, samples, buf.length-samples);
+  }
+  return buf;
+}
+function compensatedInsertPos(pos, compMs){
+  // Negative Werte bedeuten bewusst später. Positive Werte werden durch Trimmen kompensiert und bleiben am Punch-In-Punkt.
+  return Math.max(0, pos + (compMs<0 ? Math.abs(compMs)/1000 : 0));
+}
+async function calibrateLatency(){
+  await ensureMic(); await ensureAudio(); await ctx.resume();
+  show('Kalibrierung startet: Verbinde kurz einen Ausgang deines Interfaces mit dem für Track 1 gewählten Eingang. Es wird ein kurzer Klick abgespielt und gemessen.');
+  const ch=Math.max(0,Math.min(7,+tracks[0].inputChannel||0));
+  const dest=ctx.createMediaStreamDestination();
+  try{ micSplitter.connect(dest,ch,0); }catch(e){ show('Kalibrierung konnte Input '+(ch+1)+' nicht öffnen: '+e.message); return; }
+  const chunks=[]; const mr=new MediaRecorder(dest.stream);
+  mr.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+  const clickDelay=.25, recStarted=ctx.currentTime;
+  mr.start(100);
+  const osc=ctx.createOscillator(), g=ctx.createGain();
+  osc.frequency.value=1200; g.gain.setValueAtTime(0,ctx.currentTime);
+  g.gain.setValueAtTime(1,ctx.currentTime+clickDelay);
+  g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+clickDelay+.018);
+  osc.connect(g).connect(ctx.destination); osc.start(ctx.currentTime+clickDelay); osc.stop(ctx.currentTime+clickDelay+.03);
+  await new Promise(r=>setTimeout(r,1200));
+  mr.stop();
+  await new Promise(r=>mr.onstop=r);
+  try{ micSplitter.disconnect(dest,ch,0); }catch{}
+  const blob=new Blob(chunks,{type:'audio/webm'}); if(!blob.size){show('Keine Kalibrierdaten aufgenommen.');return;}
+  const buf=await ctx.decodeAudioData(await blob.arrayBuffer());
+  const d=buf.getChannelData(0); let peak=0, idx=0;
+  for(let i=0;i<d.length;i++){ const a=Math.abs(d[i]); if(a>peak){peak=a; idx=i;} }
+  if(peak<0.03){ show('Kalibrierung: Kein deutlicher Klick erkannt. Prüfe Loopback/Direct-Mix-Routing.'); return; }
+  const measured=(idx/buf.sampleRate - clickDelay)*1000;
+  if(measured < 0 || measured > 500){ show('Kalibrierung unplausibel: '+measured.toFixed(1)+' ms. Bitte Loopback prüfen oder Manual Offset benutzen.'); return; }
+  calibratedLatencyMs=measured; latencyAuto=true; updateLatencyUI(); autosaveSoon();
+  show('Kalibrierung gespeichert: '+calibratedLatencyMs.toFixed(1)+' ms. Neue Overdubs werden entsprechend früher gesetzt bzw. am Anfang getrimmt.');
+}
+
+function nowPos(){ return playing? offset+(ctx.currentTime-startAt):offset; }
+function setMode(m){ $('modeText').textContent=m; const spin=playing||recording; $('reelL').classList.toggle('spin',spin); $('reelR').classList.toggle('spin',spin); }
+function effectiveGain(t){ const soloAny=tracks.some(x=>x.solo); return (t.mute || (soloAny && !t.solo)) ? 0 : t.gain; }
+function updateLiveMix(){ tracks.forEach(t=>{ if(t.playGain) t.playGain.gain.setTargetAtTime(effectiveGain(t), ctx.currentTime, .01); if(t.playPan) t.playPan.pan.setTargetAtTime(t.pan, ctx.currentTime, .01); }); }
+function connectTrack(t, when, pos){
+  if(!t.buffer) return;
+  const src=ctx.createBufferSource();
+  src.buffer=t.buffer;
+  const g=ctx.createGain();
+  const p=ctx.createStereoPanner();
+  g.gain.value=effectiveGain(t);
+  p.pan.value=t.pan;
+  src.connect(g).connect(p).connect(masterNode());
+  src.onended=()=>{ if(t.src===src){ t.src=null; t.playGain=null; t.playPan=null; } };
+  try{src.start(when,pos);}catch{}
+  t.src=src; t.playGain=g; t.playPan=p;
+}
+let masterGain, analyser;
+function makeTapeCurve(amount=0.7){ const n=2048, curve=new Float32Array(n); for(let i=0;i<n;i++){ const x=i*2/n-1; curve[i]=Math.tanh(x*(1+amount*5))/Math.tanh(1+amount*5); } return curve; }
+function rebuildMasterChain(){
+  if(!ctx||!masterGain) return;
+  try{ masterGain.disconnect(); }catch{}
+  if(tapeInput){ try{ tapeInput.disconnect(); tapeDrive.disconnect(); tapeComp.disconnect(); tapeFilter.disconnect(); tapeOut.disconnect(); }catch{} }
+  analyser=analyser||ctx.createAnalyser(); analyser.fftSize=256;
+  if(noise){
+    tapeInput=ctx.createGain(); tapeDrive=ctx.createWaveShaper(); tapeComp=ctx.createDynamicsCompressor(); tapeFilter=ctx.createBiquadFilter(); tapeOut=ctx.createGain();
+    tapeDrive.curve=makeTapeCurve(.55); tapeDrive.oversample='2x';
+    tapeComp.threshold.value=-20; tapeComp.knee.value=14; tapeComp.ratio.value=2.2; tapeComp.attack.value=.012; tapeComp.release.value=.18;
+    tapeFilter.type='lowpass'; tapeFilter.frequency.value=10500; tapeFilter.Q.value=.4;
+    masterGain.connect(tapeInput).connect(tapeDrive).connect(tapeComp).connect(tapeFilter).connect(tapeOut).connect(analyser).connect(ctx.destination);
+    if(!tapeNoise){
+      const len=ctx.sampleRate*2, b=ctx.createBuffer(1,len,ctx.sampleRate), d=b.getChannelData(0);
+      for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*0.25;
+      tapeNoise=ctx.createBufferSource(); tapeNoise.buffer=b; tapeNoise.loop=true; tapeNoiseGain=ctx.createGain(); tapeNoiseGain.gain.value=.006; tapeNoise.connect(tapeNoiseGain); tapeNoise.start();
+    }
+    try{ tapeNoiseGain.disconnect(); }catch{} tapeNoiseGain.connect(tapeOut);
+  }else{
+    masterGain.connect(analyser).connect(ctx.destination);
+    if(tapeNoiseGain){ try{ tapeNoiseGain.disconnect(); }catch{} }
+  }
+}
+function masterNode(){ if(!masterGain){ masterGain=ctx.createGain(); analyser=ctx.createAnalyser(); analyser.fftSize=256; $('masterVol').oninput=e=>masterGain.gain.value=+e.target.value; masterGain.gain.value=+$('masterVol').value; rebuildMasterChain(); } return masterGain; }
+function play(){ ensureAudio().then(()=>{ if(playing) return; ctx.resume(); startAt=ctx.currentTime; tracks.forEach(t=>connectTrack(t,ctx.currentTime+.02,offset)); playing=true; setMode(recording?'REC+PLAY':'PLAY'); meters(); }); }
+function stop(){ const pos=nowPos(); tracks.forEach(t=>{try{t.src&&t.src.stop()}catch{} t.src=null; t.playGain=null; t.playPan=null}); if(playing) offset=pos; playing=false; if(recording) stopRec(); setMode('STOP'); cancelAnimationFrame(raf); }
+function makeTrackRecorder(t){
+  const dest=ctx.createMediaStreamDestination();
+  const ch=Math.max(0,Math.min(7,+t.inputChannel||0));
+  // Der gewählte Hardware-Kanal wird separat auf diesen Track geroutet.
+  micSplitter.connect(dest, ch, 0);
+  const keepAlive=ctx.createConstantSource();
+  const silent=ctx.createGain();
+  silent.gain.value=0;
+  keepAlive.connect(silent).connect(dest);
+  keepAlive.start();
+  t.chunks=[]; t.recNodes={dest, ch, keepAlive, silent, startPos:recStartPos};
+  let opts={};
+  if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) opts.mimeType='audio/webm;codecs=opus';
+  const mr=new MediaRecorder(dest.stream, opts); t.mediaRecorder=mr;
+  mr.ondataavailable=e=>{ if(e.data&&e.data.size) t.chunks.push(e.data); };
+  mr.onstop=async()=>{
+    const chunks=t.chunks.slice();
+    const startPos=t.recNodes?.startPos ?? recStartPos;
+    try{ micSplitter.disconnect(dest, ch, 0); }catch{}
+    try{ keepAlive.stop(); keepAlive.disconnect(); silent.disconnect(); }catch{}
+    t.recNodes=null;
+    const blob=new Blob(chunks,{type:opts.mimeType||'audio/webm'});
+    if(!blob.size) return;
+    const arr=await blob.arrayBuffer();
+    const rawBuf=await ctx.decodeAudioData(arr);
+    const compMs=estimatedLatencyMs();
+    const fixedBuf=applyLatencyCompensation(rawBuf, compMs);
+    t.buffer=mergeAt(t.buffer,fixedBuf,compensatedInsertPos(startPos, compMs));
+    $('latencyReadout').textContent += ' / angewendet: '+compMs.toFixed(1)+' ms';
+    renderMixer(); updateMobileUI(); autosaveSoon();
+  };
+  return mr;
+}
+async function startRec(){
+  await ensureMic(); await ensureAudio();
+  const armed=tracks.filter(t=>t.armed);
+  if(!armed.length){show('Bitte mindestens einen Track mit REC bewaffnen.');return;}
+  recStartPos=nowPos(); play(); recording=true; setMode('REC+PLAY');
+  armed.forEach(t=>{ try{ makeTrackRecorder(t).start(1000); }catch(e){ show('Aufnahme von Input '+((t.inputChannel||0)+1)+' konnte nicht gestartet werden: '+e.message); } });
+}
+function stopRec(){ recording=false; tracks.forEach(t=>{ if(t.mediaRecorder && t.mediaRecorder.state!=='inactive') t.mediaRecorder.stop(); t.mediaRecorder=null; }); setMode(playing?'PLAY':'STOP'); }
+function mergeAt(oldBuf,newBuf,pos){ const sr=ctx.sampleRate, ch=2, start=Math.floor(pos*sr), len=Math.max(oldBuf?oldBuf.length:0,start+newBuf.length); const out=ctx.createBuffer(ch,len,sr); for(let c=0;c<ch;c++){ const od=out.getChannelData(c); if(oldBuf) od.set(oldBuf.getChannelData(Math.min(c,oldBuf.numberOfChannels-1))); const nd=newBuf.getChannelData(Math.min(c,newBuf.numberOfChannels-1)); for(let i=0;i<nd.length;i++) od[start+i]+=nd[i]; } return out; }
+function rewind(){ offset=Math.max(0,nowPos()-5); if(playing){stop();play();} updateTime(); }
+function ff(){ offset=nowPos()+5; if(playing){stop();play();} updateTime(); }
+function updateTime(){ const p=nowPos(); const m=Math.floor(p/60), s=(p%60).toFixed(1).padStart(4,'0'); $('time').textContent=String(m).padStart(2,'0')+':'+s; }
+function meters(){ const data=new Uint8Array(128); const tick=()=>{ updateTime(); if(analyser){analyser.getByteFrequencyData(data); const avg=data.reduce((a,b)=>a+b,0)/data.length/255; $('masterL').style.height=$('masterR').style.height=Math.max(2,avg*100)+'%';} tracks.forEach((t,i)=>{ const v=(playing&&t.buffer&&!t.mute)?Math.min(1,(.08+Math.random()*.5)*t.gain):(recording&&t.armed?Math.min(1,.15+Math.random()*.35):0); const el=$('vu'+i); if(el) el.style.height=Math.max(2,v*100)+'%'; }); raf=requestAnimationFrame(tick);}; tick(); }
+async function importAudio(e){ await ensureAudio(); const i=+e.target.dataset.track; const arr=await e.target.files[0].arrayBuffer(); tracks[i].buffer=await ctx.decodeAudioData(arr); renderMixer(); updateMobileUI(); autosaveSoon(); }
+function drawWave(i){ const box=$('wave'+i), b=tracks[i].buffer; if(!box||!b) return; box.innerHTML='<canvas></canvas>'; const c=box.querySelector('canvas'), w=c.width=420,h=c.height=42, g=c.getContext('2d'), d=b.getChannelData(0), step=Math.ceil(d.length/w); g.clearRect(0,0,w,h); g.strokeStyle='#d87b32'; g.beginPath(); for(let x=0;x<w;x++){ let min=1,max=-1; for(let j=0;j<step;j++){const v=d[x*step+j]||0; if(v<min)min=v;if(v>max)max=v;} g.moveTo(x,(1+min)*h/2); g.lineTo(x,(1+max)*h/2);} g.stroke(); }
+async function exportMix(){ await ensureAudio(); const duration=Math.max(1,...tracks.map(t=>t.buffer?t.buffer.duration:0)); const sr=44100, off=new OfflineAudioContext(2,Math.ceil(duration*sr),sr); tracks.forEach(t=>{ if(!t.buffer||t.mute) return; const src=off.createBufferSource(); src.buffer=t.buffer; const g=off.createGain(); const p=off.createStereoPanner(); g.gain.value=t.gain; p.pan.value=t.pan; src.connect(g).connect(p).connect(off.destination); src.start(0); }); let rendered=await off.startRendering(); if(noise) rendered=renderTapeToBuffer(rendered); downloadBlob(bufferToWav(rendered),'portastudio-mix.wav'); }
+function renderTapeToBuffer(buffer){
+  const out=ctx.createBuffer(buffer.numberOfChannels,buffer.length,buffer.sampleRate);
+  for(let c=0;c<buffer.numberOfChannels;c++){
+    const src=buffer.getChannelData(c), dst=out.getChannelData(c); let lp=0;
+    for(let i=0;i<src.length;i++){
+      let x=Math.tanh(src[i]*1.7)/Math.tanh(1.7);
+      lp += 0.22*(x-lp); // sanfter Höhen-Roll-off
+      dst[i]=Math.max(-1,Math.min(1,lp + (Math.random()*2-1)*0.0025));
+    }
+  }
+  return out;
+}
+function bufferToWav(buffer){ const ch=buffer.numberOfChannels, len=buffer.length*ch*2+44, ab=new ArrayBuffer(len), v=new DataView(ab); let p=0; const ws=s=>{for(let i=0;i<s.length;i++)v.setUint8(p++,s.charCodeAt(i));}; ws('RIFF'); v.setUint32(p,36+buffer.length*ch*2,true);p+=4;ws('WAVEfmt ');v.setUint32(p,16,true);p+=4;v.setUint16(p,1,true);p+=2;v.setUint16(p,ch,true);p+=2;v.setUint32(p,buffer.sampleRate,true);p+=4;v.setUint32(p,buffer.sampleRate*ch*2,true);p+=4;v.setUint16(p,ch*2,true);p+=2;v.setUint16(p,16,true);p+=2;ws('data');v.setUint32(p,buffer.length*ch*2,true);p+=4; for(let i=0;i<buffer.length;i++)for(let c=0;c<ch;c++){let s=Math.max(-1,Math.min(1,buffer.getChannelData(c)[i]));v.setInt16(p,s<0?s*0x8000:s*0x7fff,true);p+=2;} return new Blob([ab],{type:'audio/wav'}); }
+function downloadBlob(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+async function save(){ await ensureAudio(); const data={selectedInputId,latencyManualMs,latencyAuto,calibratedLatencyMs,tracks:await Promise.all(tracks.map(async t=>({name:t.name,gain:t.gain,pan:t.pan,mute:t.mute,solo:t.solo,armed:t.armed,inputChannel:t.inputChannel,wav:t.buffer?await blobToDataURL(bufferToWav(t.buffer)):null})))}; localStorage.setItem(DB,JSON.stringify(data)); $('saveStatus').textContent='Gespeichert'; $('saveStatus').classList.add('on'); }
+let saveTimer; function autosaveSoon(){ $('saveStatus').textContent='Änderungen...'; clearTimeout(saveTimer); saveTimer=setTimeout(save,900); }
+function blobToDataURL(blob){ return new Promise(r=>{const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob);}); }
+async function load(){ const raw=localStorage.getItem(DB); if(!raw) return; await ensureAudio(); const data=JSON.parse(raw); if(data.selectedInputId) selectedInputId=data.selectedInputId; if(typeof data.latencyManualMs==='number') latencyManualMs=data.latencyManualMs; if(typeof data.latencyAuto==='boolean') latencyAuto=data.latencyAuto; if(typeof data.calibratedLatencyMs==='number') calibratedLatencyMs=data.calibratedLatencyMs; updateLatencyUI(); for(let i=0;i<N;i++){ if(!data.tracks?.[i]) continue; Object.assign(tracks[i],data.tracks[i]); if(tracks[i].inputChannel===undefined) tracks[i].inputChannel=i; if(data.tracks[i].wav){ const arr=await (await fetch(data.tracks[i].wav)).arrayBuffer(); tracks[i].buffer=await ctx.decodeAudioData(arr); } } renderMixer(); }
+
+let mobileTrack=0, mobileCountdown=null;
+function isMobileLike(){ return matchMedia('(max-width: 700px)').matches || matchMedia('(pointer: coarse)').matches; }
+function initMobileMode(){ document.body.classList.toggle('mobile-mode', isMobileLike()); window.addEventListener('resize',()=>document.body.classList.toggle('mobile-mode', isMobileLike())); updateMobileUI(); }
+function updateMobileUI(){
+  const tabs=$('mobileTrackTabs'); if(!tabs) return;
+  tabs.innerHTML=tracks.map((t,i)=>`<button data-mobile-track="${i}" class="${i===mobileTrack?'active':''}">T${i+1}</button>`).join('');
+  const inp=$('mobileInput'); if(inp){ inp.innerHTML=channelOptions(tracks[mobileTrack].inputChannel??mobileTrack); inp.value=tracks[mobileTrack].inputChannel??mobileTrack; }
+  const arm=$('mobileArm'); if(arm){ arm.textContent=(tracks[mobileTrack].armed?'REC an':'REC aus')+' · Track '+(mobileTrack+1); arm.classList.toggle('active', tracks[mobileTrack].armed); }
+  const mon=$('mobileMonitor'); if(mon){ mon.textContent=monitor?'Monitor an':'Monitor aus'; mon.classList.toggle('active', monitor); }
+  const help=$('mobileLatencyHelp'); if(help){ help.textContent='Overdub-Korrektur: '+(latencyManualMs>=0?'+':'')+latencyManualMs.toFixed(1)+' ms. Zu spät? „früher“. Zu früh? „später“.'; }
+}
+function mobileNudge(ms){ latencyManualMs=Math.max(-2000,Math.min(2000,latencyManualMs+ms)); latencyAuto=false; updateLatencyUI(); updateMobileUI(); autosaveSoon(); }
+function startMobileCountdown(){
+  if(recording){ stop(); updateTime(); return; }
+  let n=3; const b=$('mobileRec'); if(!b) return startRec();
+  b.textContent='REC in '+n; clearInterval(mobileCountdown);
+  mobileCountdown=setInterval(()=>{ n--; if(n>0){ b.textContent='REC in '+n; } else { clearInterval(mobileCountdown); b.textContent='● REC läuft'; startRec(); } }, 700);
+}
+document.body.addEventListener('click',e=>{
+  const d=e.target.dataset;
+  if(d.mobileTrack!==undefined){ mobileTrack=+d.mobileTrack; updateMobileUI(); document.querySelectorAll('.track')[mobileTrack]?.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
+});
+$('mobileInput')?.addEventListener('change',e=>{ tracks[mobileTrack].inputChannel=+e.target.value; renderMixer(); updateMobileUI(); autosaveSoon(); });
+$('mobileArm')?.addEventListener('click',()=>{ tracks[mobileTrack].armed=!tracks[mobileTrack].armed; renderMixer(); updateMobileUI(); autosaveSoon(); });
+$('mobileMonitor')?.addEventListener('click',async()=>{ $('monitorBtn').click(); setTimeout(updateMobileUI,100); });
+$('mobileEarlier')?.addEventListener('click',()=>mobileNudge(+5));
+$('mobileLater')?.addEventListener('click',()=>mobileNudge(-5));
+$('mobileRec')?.addEventListener('click',startMobileCountdown);
+$('mobileAdvanced')?.addEventListener('click',()=>{ document.body.classList.toggle('show-advanced'); $('mobileAdvanced').textContent=document.body.classList.contains('show-advanced')?'Advanced aus':'Advanced'; });
+
+$('play').onclick=play; $('stop').onclick=()=>{stop();updateTime();}; $('rec').onclick=startRec; $('rew').onclick=rewind; $('ff').onclick=ff; $('save').onclick=save; $('export').onclick=exportMix; $('refreshInputs').onclick=refreshInputDevices; $('latencyOffset').oninput=e=>{latencyManualMs=+e.target.value; updateLatencyUI(); autosaveSoon();}; $('autoLatency').onchange=e=>{latencyAuto=e.target.checked; updateLatencyUI(); autosaveSoon();}; $('resetLatency').onclick=()=>{latencyManualMs=0; calibratedLatencyMs=null; latencyAuto=true; updateLatencyUI(); autosaveSoon();}; $('calibrateLatency').onclick=()=>calibrateLatency().catch(e=>show('Kalibrierung fehlgeschlagen: '+e.message));
+$('inputDevice').onchange=()=>{ selectedInputId=$('inputDevice').value; const wasMonitor=monitor; if(monitor&&monitorGain){try{monitorGain.disconnect()}catch{}} closeMic(); if(wasMonitor){ ensureMic().then(()=>startMonitor()).catch(e=>show('Audiointerface konnte nicht geöffnet werden: '+e.message)); } autosaveSoon(); };
+function startMonitor(){ if(!micSplitter) return; monitorGain=ctx.createGain(); monitorGain.gain.value=.8; for(let c=0;c<8;c++){ try{ micSplitter.connect(monitorGain,c,0); }catch{} } monitorGain.connect(masterNode()); }
+function stopMonitor(){ if(monitorGain){ try{monitorGain.disconnect()}catch{} monitorGain=null; } }
+$('monitorBtn').onclick=async()=>{ await ensureMic(); monitor=!monitor; $('monitorBtn').classList.toggle('active',monitor); if(monitor) startMonitor(); else stopMonitor(); };
+$('noiseBtn').onclick=async()=>{await ensureAudio(); noise=!noise; $('noiseBtn').classList.toggle('active',noise); rebuildMasterChain(); autosaveSoon();};
+
+let deferredInstallPrompt=null;
+function setupPWAInstall(){
+  try{
+    const manifest={name:'4-Track Web Portastudio',short_name:'Portastudio',start_url:'.',display:'standalone',background_color:'#151412',theme_color:'#191816',description:'Responsive 4-Track Web Portastudio'};
+    const blob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
+    const link=document.createElement('link'); link.rel='manifest'; link.href=URL.createObjectURL(blob); document.head.appendChild(link);
+  }catch{}
+  window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferredInstallPrompt=e; const b=$('installApp'); if(b) b.style.display='inline-block'; });
+  $('installApp')?.addEventListener('click',async()=>{ if(!deferredInstallPrompt) return; deferredInstallPrompt.prompt(); await deferredInstallPrompt.userChoice.catch(()=>{}); deferredInstallPrompt=null; $('installApp').style.display='none'; });
+}
+async function exportProjectFile(){ await save(); const raw=localStorage.getItem(DB)||'{}'; downloadBlob(new Blob([raw],{type:'application/json'}),'portastudio-project.json'); }
+async function importProjectFile(e){ const f=e.target.files?.[0]; if(!f) return; const txt=await f.text(); try{ JSON.parse(txt); localStorage.setItem(DB,txt); location.reload(); }catch{ show('Projektdatei konnte nicht gelesen werden.'); } }
+
+$('exportProject')?.addEventListener('click',exportProjectFile); $('importProject')?.addEventListener('change',importProjectFile); setupPWAInstall();
+renderMixer(); bindUI(); initMobileMode(); refreshInputDevices().catch(()=>{}); if(navigator.mediaDevices) navigator.mediaDevices.ondevicechange=()=>refreshInputDevices().catch(()=>{}); load().catch(()=>{}); updateTime();
+})();
+</script>
+</body>
+</html>
